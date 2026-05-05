@@ -7,13 +7,16 @@
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
-    "test": "jest"
+    "test": "jest",
+    "windows": "npx @react-native-community/cli run-windows",
+    "test:windows": "jest --config jest.config.windows.js"
   },
   "dependencies": {
+    "@react-native/new-app-screen": "0.82.0",
     "react": "19.1.1",
     "react-native": "0.82.0",
-    "@react-native/new-app-screen": "0.82.0",
-    "react-native-safe-area-context": "^5.5.2"
+    "react-native-safe-area-context": "^5.5.2",
+    "react-native-windows": "^0.82.5"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
@@ -26,6 +29,7 @@
     "@react-native/eslint-config": "0.82.0",
     "@react-native/metro-config": "0.82.0",
     "@react-native/typescript-config": "0.82.0",
+    "@rnx-kit/jest-preset": "^0.1.17",
     "@types/jest": "^29.5.13",
     "@types/react": "^19.1.1",
     "@types/react-test-renderer": "^19.1.0",
@@ -37,5 +41,12 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "react-native-windows": {
+    "init-windows": {
+      "name": "RawChat",
+      "namespace": "RawChat",
+      "template": "cpp-app"
+    }
   }
 }
