@@ -6,6 +6,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import {
@@ -18,7 +19,6 @@ import {
   WEB_SEARCH_TOOL,
 } from '../api/deepseek';
 import {formatResultsForLLM, searchWeb} from '../api/webSearch';
-import {ChatInputBar, ChatInputBarHandle} from '../components/ChatInputBar';
 import {ConversationIOModal} from '../components/ConversationIOModal';
 import {DisplayMessage, MessageBubble} from '../components/MessageBubble';
 import {ModelPicker} from '../components/ModelPicker';
@@ -62,6 +62,7 @@ export function ChatScreen({
   const [streamingText, setStreamingText] = useState('');
   const [toolStatuses, setToolStatuses] = useState<DisplayMessage[]>([]);
 
+  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,11 +71,12 @@ export function ChatScreen({
 
   const flatListRef = useRef<FlatList<DisplayMessage>>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const inputBarRef = useRef<ChatInputBarHandle>(null);
 
   // Refs so the async stream callback never reads stale state.
   const messagesRef = useRef<Message[]>([]);
   messagesRef.current = messages;
+  const inputRef = useRef('');
+  inputRef.current = input;
   const loadingRef = useRef(false);
   loadingRef.current = loading;
   const modelRef = useRef(model);
@@ -123,10 +125,8 @@ export function ChatScreen({
 
   // ── Send ────────────────────────────────────────────────────────────
 
-  // ChatInputBar passes the trimmed text directly; we no longer hold an
-  // `input` state in this screen (uncontrolled — see ChatInputBar.tsx).
-  const handleSend = useCallback(async (text: string) => {
-    const trimmed = text.trim();
+  const handleSend = useCallback(async () => {
+    const trimmed = inputRef.current.trim();
     if (!trimmed || loadingRef.current) {return;}
     if (!apiKeyRef.current) {
       setError('APIキーが設定されていません。右上の設定から入力してください。');
@@ -136,6 +136,7 @@ export function ChatScreen({
     const userMessage: Message = {id: makeId(), role: 'user', content: trimmed};
     const baseMessages = [...messagesRef.current, userMessage];
     setMessages(baseMessages);
+    setInput('');
     setError(null);
     setLoading(true);
 
@@ -327,7 +328,7 @@ export function ChatScreen({
     setStreamingText('');
     setToolStatuses([]);
     setError(null);
-    inputBarRef.current?.clear();
+    setInput('');
     if (importedModel) {
       onModelChange(importedModel);
       saveSelectedModel(importedModel);
@@ -335,6 +336,8 @@ export function ChatScreen({
   };
 
   // ── UI ─────────────────────────────────────────────────────────────
+
+  const canSend = input.trim().length > 0 && !loading;
 
   return (
     <View style={[styles.root, {backgroundColor: C.rootBg}]}>
@@ -529,13 +532,76 @@ export function ChatScreen({
         )}
 
         {/* ── 入力欄 ── */}
-        <ChatInputBar
-          ref={inputBarRef}
-          loading={loading}
-          disabled={!apiKey}
-          onSend={handleSend}
-          onStop={handleStop}
-        />
+        <View
+          style={[
+            styles.inputBar,
+            {backgroundColor: C.inputBarBg, borderTopColor: C.divider},
+          ]}>
+          <TextInput
+            style={[
+              styles.textInput,
+              {
+                backgroundColor: C.inputBg,
+                borderColor: C.inputBorder,
+                color: C.textPrimary,
+              },
+            ]}
+            value={input}
+            onChangeText={setInput}
+            placeholder="メッセージを入力... (Enter: 改行 / Ctrl+Enter: 送信)"
+            placeholderTextColor={C.textSecondary}
+            multiline
+            maxLength={16000}
+            // Plain Enter inserts a newline (multiline default). Only
+            // Ctrl+Enter fires onSubmitEditing. The prop is RNW-specific
+            // and missing from the cross-platform TextInputProps types,
+            // so the cast is intentional.
+            {...({
+              submitKeyEvents: [{code: 'Enter', ctrlKey: true}],
+            } as any)}
+            onSubmitEditing={handleSend}
+            blurOnSubmit={false}
+          />
+
+          {loading ? (
+            <Tooltip text="送信を停止">
+              <Pressable
+                style={({pressed}) => [
+                  styles.sendButton,
+                  {backgroundColor: pressed ? C.errorText : '#9B2C2C'},
+                ]}
+                onPress={handleStop}>
+                <Text style={[styles.sendButtonText, {color: '#FFFFFF'}]}>
+                  ■
+                </Text>
+              </Pressable>
+            </Tooltip>
+          ) : (
+            <Tooltip text="送信 (Ctrl+Enter)">
+              <Pressable
+                style={({pressed}) => [
+                  styles.sendButton,
+                  {
+                    backgroundColor: canSend
+                      ? pressed
+                        ? C.accentPressed
+                        : C.accent
+                      : C.inputBorder,
+                  },
+                ]}
+                onPress={handleSend}
+                disabled={!canSend}>
+                <Text
+                  style={[
+                    styles.sendButtonText,
+                    {color: canSend ? '#FFFFFF' : C.textSecondary},
+                  ]}>
+                  ↑
+                </Text>
+              </Pressable>
+            </Tooltip>
+          )}
+        </View>
       </KeyboardAvoidingView>
 
       <ConversationIOModal
@@ -709,5 +775,36 @@ const styles = StyleSheet.create({
   },
   errorText: {flex: 1, fontSize: 13},
   errorDismiss: {fontSize: 16, paddingHorizontal: 4},
-  // The input bar / send-button styles now live inside ChatInputBar.tsx.
+  inputBar: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  textInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 14,
+    minHeight: 40,
+    maxHeight: 200,
+    textAlignVertical: 'top',
+  },
+  sendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  sendButtonText: {
+    fontSize: 18,
+    fontWeight: '700',
+    lineHeight: 22,
+  },
 });
