@@ -42,6 +42,10 @@ export interface AppColors {
   errorText: string;
   warningBg: string;
   warningText: string;
+
+  // Tooltip / popover
+  tooltipBg: string;
+  tooltipText: string;
 }
 
 export function useColors(): AppColors {
@@ -99,5 +103,9 @@ export function useColors(): AppColors {
     errorText: isDark ? '#FFAAAA' : '#CC0000',
     warningBg: '#7A4500',
     warningText: '#FFD080',
+
+    // Tooltip
+    tooltipBg: isDark ? '#2C2C2C' : '#1F1F1F',
+    tooltipText: '#FFFFFF',
   };
 }

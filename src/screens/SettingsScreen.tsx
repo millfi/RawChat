@@ -1,44 +1,37 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   ActivityIndicator,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import {useColors} from '../hooks/useColors';
-import {saveApiKey} from '../storage/apiKeyStorage';
+import {
+  saveApiKey,
+  saveTavilyKey,
+} from '../storage/apiKeyStorage';
 
 interface Props {
-  /** API key already held by App.tsx — pre-fills the input. */
+  /** Currently held by App.tsx — pre-fills the input. */
   initialApiKey: string;
+  initialTavilyKey: string;
   onBack: () => void;
   /** Called immediately after a successful save so App can update its state. */
   onApiKeySaved: (key: string) => void;
+  onTavilyKeySaved: (key: string) => void;
 }
 
-export function SettingsScreen({initialApiKey, onBack, onApiKeySaved}: Props) {
+export function SettingsScreen({
+  initialApiKey,
+  initialTavilyKey,
+  onBack,
+  onApiKeySaved,
+  onTavilyKeySaved,
+}: Props) {
   const C = useColors();
-  const [apiKey, setApiKey] = useState(initialApiKey);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  const handleSave = async () => {
-    setSaving(true);
-    setSaved(false);
-    try {
-      await saveApiKey(apiKey);
-      onApiKeySaved(apiKey.trim()); // notify App.tsx immediately
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (e: any) {
-      // Surface storage errors so the user knows the save failed
-      console.error('[SettingsScreen] save failed:', e?.message ?? String(e));
-    } finally {
-      setSaving(false);
-    }
-  };
 
   return (
     <View style={[styles.root, {backgroundColor: C.rootBg}]}>
@@ -57,59 +50,28 @@ export function SettingsScreen({initialApiKey, onBack, onApiKeySaved}: Props) {
       </View>
 
       {/* ── Content ── */}
-      <View style={styles.content}>
-        {/* API key card */}
-        <View style={[styles.card, {backgroundColor: C.cardBg}]}>
-          <Text style={[styles.sectionTitle, {color: C.textPrimary}]}>
-            DeepSeek API キー
-          </Text>
-          <Text style={[styles.description, {color: C.textSecondary}]}>
-            DeepSeek Platform (platform.deepseek.com) で取得したAPIキーを入力してください。
-          </Text>
+      <ScrollView contentContainerStyle={styles.content}>
+        <ApiKeyCard
+          title="DeepSeek API キー"
+          description="DeepSeek Platform (platform.deepseek.com) で取得したAPIキーを入力してください。"
+          placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+          initialValue={initialApiKey}
+          onSave={async value => {
+            await saveApiKey(value);
+            onApiKeySaved(value.trim());
+          }}
+        />
 
-          <TextInput
-            style={[
-              styles.input,
-              {
-                backgroundColor: C.inputBg,
-                borderColor: C.inputBorder,
-                color: C.textPrimary,
-              },
-            ]}
-            value={apiKey}
-            onChangeText={text => {
-              setApiKey(text);
-              setSaved(false);
-            }}
-            placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
-            placeholderTextColor={C.textSecondary}
-            secureTextEntry
-            autoCorrect={false}
-            autoCapitalize="none"
-          />
-
-          <Pressable
-            style={({pressed}) => [
-              styles.saveButton,
-              {
-                backgroundColor: saved
-                  ? C.success
-                  : pressed
-                    ? C.accentPressed
-                    : C.accent,
-              },
-            ]}
-            onPress={handleSave}
-            disabled={saving || apiKey.trim() === ''}>
-            {saving ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={styles.saveButtonText}>
-                {saved ? '✓ 保存しました' : '保存'}
-              </Text>
-            )}
-          </Pressable>
-        </View>
+        <ApiKeyCard
+          title="Tavily API キー (ウェブ検索用)"
+          description="ウェブ検索を有効にするには Tavily (app.tavily.com) で取得したAPIキーを入力してください。月1,000回まで無料です。未設定でもチャットは利用できます。"
+          placeholder="tvly-xxxxxxxxxxxxxxxxxxxxxxxx"
+          initialValue={initialTavilyKey}
+          onSave={async value => {
+            await saveTavilyKey(value);
+            onTavilyKeySaved(value.trim());
+          }}
+        />
 
         {/* Note card */}
         <View
@@ -118,10 +80,102 @@ export function SettingsScreen({initialApiKey, onBack, onApiKeySaved}: Props) {
             {backgroundColor: C.cardBg, borderLeftColor: C.accent},
           ]}>
           <Text style={[styles.noteText, {color: C.textSecondary}]}>
-            💡 APIキーはデバイス内にのみ保存されます。外部サーバーには送信されません。
+            💡 APIキーはデバイス内にのみ保存されます。チャット送信時にDeepSeek、ウェブ検索時にTavilyのみに送信されます。
           </Text>
         </View>
-      </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+// ── Reusable card for one API key ─────────────────────────────────────
+
+interface CardProps {
+  title: string;
+  description: string;
+  placeholder: string;
+  initialValue: string;
+  onSave: (value: string) => Promise<void>;
+}
+
+function ApiKeyCard({title, description, placeholder, initialValue, onSave}: CardProps) {
+  const C = useColors();
+  const [value, setValue] = useState(initialValue);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  // Keep the input in sync if the parent's persisted value loads after mount.
+  useEffect(() => {
+    setValue(initialValue);
+  }, [initialValue]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaved(false);
+    try {
+      await onSave(value);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e: any) {
+      console.error(`[Settings] save "${title}" failed:`, e?.message ?? String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Allow saving an empty string to clear the key.
+  const canSave = !saving && value !== initialValue;
+
+  return (
+    <View style={[styles.card, {backgroundColor: C.cardBg}]}>
+      <Text style={[styles.sectionTitle, {color: C.textPrimary}]}>{title}</Text>
+      <Text style={[styles.description, {color: C.textSecondary}]}>
+        {description}
+      </Text>
+
+      <TextInput
+        style={[
+          styles.input,
+          {
+            backgroundColor: C.inputBg,
+            borderColor: C.inputBorder,
+            color: C.textPrimary,
+          },
+        ]}
+        value={value}
+        onChangeText={text => {
+          setValue(text);
+          setSaved(false);
+        }}
+        placeholder={placeholder}
+        placeholderTextColor={C.textSecondary}
+        secureTextEntry
+        autoCorrect={false}
+        autoCapitalize="none"
+      />
+
+      <Pressable
+        style={({pressed}) => [
+          styles.saveButton,
+          {
+            backgroundColor: saved
+              ? C.success
+              : pressed
+                ? C.accentPressed
+                : C.accent,
+            opacity: canSave ? 1 : 0.5,
+          },
+        ]}
+        onPress={handleSave}
+        disabled={!canSave}>
+        {saving ? (
+          <ActivityIndicator color="#fff" size="small" />
+        ) : (
+          <Text style={styles.saveButtonText}>
+            {saved ? '✓ 保存しました' : '保存'}
+          </Text>
+        )}
+      </Pressable>
     </View>
   );
 }
@@ -151,7 +205,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   content: {
-    flex: 1,
     padding: 24,
     gap: 16,
   },
